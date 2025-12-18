@@ -118,8 +118,17 @@ def services():
 @app.route('/api/categories')
 def categories():
     """Get all unique categories"""
-    cats = list(set(s['category'] for s in SERVICES_DATA))
-    return jsonify(sorted(cats))
+    try:
+        # Ensure SERVICES_DATA is a list
+        if not isinstance(SERVICES_DATA, list):
+            return jsonify([])
+        
+        cats = list(set(s.get('category', 'Unknown') for s in SERVICES_DATA if isinstance(s, dict)))
+        return jsonify(sorted(cats))
+    except Exception as e:
+        print(f"[ERROR] Categories endpoint failed: {e}")
+        return jsonify([]), 500
+```
 
 @app.route('/service/<service_name>')
 def service_detail(service_name):
