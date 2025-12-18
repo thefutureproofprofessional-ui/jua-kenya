@@ -1,0 +1,270 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 1,4"
+            }
+          ]
+        }
+      },
+      "id": "b2b5fa5c-ba63-46af-956f-97517ca1d079",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -256,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const services = [\n  {\n    service_name: 'Passport Application (Ordinary)',\n    category: 'Government',\n    paybill_number: '222222',\n    account_format: 'eCitizen Invoice No',\n    requirements: 'ID, Birth Cert, Parents IDs, Recommender ID',\n    cost: '34 Pages: Ksh 7,550 | 50 Pages: Ksh 9,550 | 66 Pages: Ksh 12,050',\n    process_steps: 'Apply via eCitizen -> Immigration. Booking required.',\n    source_url: 'https://immigration.go.ke'\n  },\n  {\n    service_name: 'National ID (First Time)',\n    category: 'Government',\n    paybill_number: '222222',\n    account_format: 'eCitizen Invoice No',\n    requirements: 'Birth Cert, Parents IDs, Proof of Residence',\n    cost: 'Ksh 300',\n    process_steps: 'Must be done in person at Huduma Center/Registrar',\n    source_url: 'https://identity.go.ke'\n  },\n  {\n    service_name: 'Birth Certificate',\n    category: 'Government',\n    paybill_number: '222222',\n    account_format: 'eCitizen Invoice No',\n    requirements: 'Notification of Birth, Parents IDs',\n    cost: 'Standard: Ksh 200 | Late Registration: Ksh 500',\n    process_steps: 'Apply via eCitizen Civil Registration',\n    source_url: 'https://ecitizen.go.ke'\n  },\n  {\n    service_name: 'NTSA (Driving License & Logbook)',\n    category: 'Government',\n    paybill_number: '222222',\n    account_format: 'eCitizen Invoice No',\n    requirements: 'Old DL, ID, Medical Report (for renewal)',\n    cost: 'Renewal: Ksh 650 (1yr) - Ksh 3000 (3yr)',\n    process_steps: 'Use NTSA Portal on eCitizen',\n    source_url: 'https://ntsa.go.ke'\n  },\n  {\n    service_name: 'HELB Loan Repayment',\n    category: 'Government',\n    paybill_number: '222222',\n    account_format: 'ID Number',\n    requirements: 'National ID',\n    cost: 'Loan Amount',\n    process_steps: 'Select HELB on eCitizen Services',\n    source_url: 'https://helb.co.ke'\n  },\n  {\n    service_name: 'Marriage by Notice (Civil/Christian)',\n    category: 'Government',\n    paybill_number: '222222',\n    account_format: 'Service Reference Number',\n    requirements: 'IDs & Birth Certificates, Passport Photos, Proof of Single Status',\n    cost: 'Ksh 600 (Notice Fee), Ksh 800 or Ksh 7,200 (Certificate Fee)',\n    process_steps: 'Minimum 21-day notice; Interview after notice period',\n    source_url: 'https://ecitizen.go.ke'\n  },\n  {\n    service_name: 'Equity Bank (Mobile)',\n    category: 'Banking',\n    paybill_number: '247247',\n    account_format: 'Bank Account Number',\n    requirements: null,\n    cost: 'Transaction Fee',\n    process_steps: 'Dial USSD *247# for menu',\n    source_url: 'https://equitygroupholdings.com'\n  },\n  {\n    service_name: 'KCB Bank (Mobile)',\n    category: 'Banking',\n    paybill_number: '522522',\n    account_format: 'Bank Account Number',\n    requirements: null,\n    cost: 'Transaction Fee',\n    process_steps: 'Dial USSD *522# for menu',\n    source_url: 'https://kcbgroup.com'\n  },\n  {\n    service_name: 'DSTV Kenya',\n    category: 'Entertainment',\n    paybill_number: '444900',\n    account_format: 'Smart Card Number',\n    requirements: null,\n    cost: 'Subscription Plan',\n    process_steps: 'Ensure decoder is on when paying',\n    source_url: 'https://dstv.com'\n  },\n  {\n    service_name: 'Nairobi Water (NCWSC)',\n    category: 'Utilities',\n    paybill_number: '4100100',\n    account_format: 'Account Number',\n    requirements: null,\n    cost: 'Bill Amount',\n    process_steps: 'Pay via M-PESA Paybill',\n    source_url: 'https://nairobiwater.co.ke'\n  }\n];\n\nreturn services.map(service => ({ json: service }));"
+      },
+      "id": "3e006e1a-2680-4f21-bf75-50d791e6c95c",
+      "name": "Process Service Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WEBSITE_API_URL }}/api/services",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "services",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "f520d028-b6c9-4fc7-b542-4637eb1c1419",
+      "name": "Send to Website API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        400,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://money.ke/mpesa",
+        "options": {}
+      },
+      "id": "626e2ca5-8fa5-43f2-ab81-b2b339f3c83b",
+      "name": "Fetch Data 1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.elimucentre.com/mpesa-charges/",
+        "options": {}
+      },
+      "id": "3646a30a-23ce-4d73-babb-0ab498f949b8",
+      "name": "Fetch Data 2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        0,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://biznakenya.com/mpesa-paybill-numbers/",
+        "options": {}
+      },
+      "id": "9f1e62a2-1d45-44db-9408-bcb79f40f5e9",
+      "name": "Fetch Data 3",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        0,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://victormochere.com/m-pesa-paybill-numbers-for-all-mobile-loan-apps-in-kenya",
+        "options": {}
+      },
+      "id": "f3a6ed91-5bf3-41fd-92fd-db06d0fe0ccf",
+      "name": "Fetch Data 4",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        16,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://steep-mode-9a93.thefutureproofprofessional.workers.dev/",
+        "options": {}
+      },
+      "id": "b7071ef0-46f6-45cd-9067-df26fa48e3ab",
+      "name": "Fetch Data 5",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        16,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ensure input exists\nif (!items.length || !items[0].json || !Array.isArray(items[0].json.data)) {\n  throw new Error('No data array found in input');\n}\n\n// Split \"data\" array into separate n8n items\nreturn items[0].json.data.map(paybill => {\n  return {\n    json: {\n      service_name: paybill.service_name,\n      paybill_number: paybill.paybill_number,\n      category: paybill.category,\n      source: paybill.source,\n      last_checked: paybill.last_checked\n    }\n  };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        112,
+        656
+      ],
+      "id": "041d3450-f428-45ac-9175-40e52689db9e",
+      "name": "Code in JavaScript"
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Data 1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Data 2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Data 3",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Data 4",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Data 5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Service Data": {
+      "main": [
+        [
+          {
+            "node": "Send to Website API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to Website API": {
+      "main": [
+        []
+      ]
+    },
+    "Fetch Data 1": {
+      "main": [
+        [
+          {
+            "node": "Process Service Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Data 2": {
+      "main": [
+        [
+          {
+            "node": "Process Service Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Data 3": {
+      "main": [
+        [
+          {
+            "node": "Process Service Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Data 4": {
+      "main": [
+        [
+          {
+            "node": "Process Service Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Data 5": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Process Service Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "96d1e18296bef7d5687ad800202e8c87d9acfd87c73321ad6c13d31cb3cf0d2c"
+  }
+}
