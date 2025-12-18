@@ -1,24 +1,19 @@
 """
 Kenya Services Information Platform
-Direct Link Architecture: Python <--> Cloudflare
+Fixed: Includes 'Garbage Filter' to block Z-Index and CSS errors.
 """
 
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
-import requests  # NEW: Allows Python to download data directly
 import json
 
 app = Flask(__name__)
 CORS(app)
 
-# --- CONFIGURATION ---
-# Replace this with your actual Cloudflare Worker URL
-CLOUDFLARE_WORKER_URL = "https://steep-mode-9a93.thefutureproofprofessional.workers.dev/"
-
-# --- DATA STORAGE ---
+# In-memory storage
 SERVICES_DATA = []
 
-# Backup Data (Safe Fallback)
+# Sample initial data
 INITIAL_DATA = [
     {
         "service_name": "Passport Application (Ordinary)",
@@ -27,6 +22,7 @@ INITIAL_DATA = [
         "account_format": "eCitizen Invoice No",
         "requirements": "ID, Birth Cert, Parents IDs",
         "cost": "Ksh 4,550",
+        "process_steps": "Apply via eCitizen",
         "source_url": "https://immigration.go.ke"
     },
     {
@@ -36,28 +32,40 @@ INITIAL_DATA = [
         "account_format": "Meter No",
         "requirements": "None",
         "cost": "Bill Amount",
+        "process_steps": "Pay via M-PESA",
         "source_url": "https://kplc.co.ke"
     }
 ]
+
 SERVICES_DATA = INITIAL_DATA.copy()
 
-# --- HELPER: CLEANING LOGIC ---
-def clean_and_format(item):
-    """Filters out garbage data from the scraper"""
-    if not isinstance(item, dict): return None
+# --- THE FIREWALL: CLEANING LOGIC ---
+def is_garbage(item):
+    """Returns True if the item looks like a bug (CSS, Z-Index, etc)"""
+    if not isinstance(item, dict): return True
     
-    # 1. Get Name
-    raw_name = str(item.get('service_name') or item.get('title') or "")
+    # 1. Get the name
+    raw_name = str(item.get('service_name') or item.get('title') or "").lower()
     
-    # 2. Block Garbage (HTML code, Z-Index, etc)
-    if '&' in raw_name or ';' in raw_name or 'z-index' in raw_name.lower():
-        return None
-    if len(raw_name) < 4 or raw_name.isdigit():
-        return None
+    # 2. Block CSS/Code keywords (The "Z-Index" Fix)
+    bad_words = ['z-index', 'width', 'height', 'padding', 'margin', 'charset', 'viewport', 'var(', 'function']
+    if any(word in raw_name for word in bad_words):
+        return True
+        
+    # 3. Block HTML artifacts
+    if '&' in raw_name or ';' in raw_name or '{' in raw_name:
+        return True
+        
+    # 4. Block nonsense names
+    if len(raw_name) < 3 or raw_name.isdigit():
+        return True
+        
+    return False
 
-    # 3. Format Fields
+def clean_item(item):
+    """Polishes a valid item for display"""
     return {
-        "service_name": raw_name.title(),
+        "service_name": (item.get('service_name') or item.get('title') or "Unknown").title(),
         "category": (item.get('category') or "General").title(),
         "paybill_number": str(item.get('paybill_number') or item.get('paybill') or "N/A"),
         "account_format": item.get('account_format') or "Account No",
@@ -73,50 +81,39 @@ def clean_and_format(item):
 def index():
     return render_template('index.html')
 
-# NEW: The "Trigger" Route
-# Visiting this URL forces Python to go fetch new data
-@app.route('/update-now', methods=['GET'])
-def trigger_update():
+@app.route('/api/services', methods=['GET', 'POST'])
+def services():
     global SERVICES_DATA
-    try:
-        print("Connecting to Cloudflare...")
-        response = requests.get(CLOUDFLARE_WORKER_URL, timeout=10)
-        
-        if response.status_code != 200:
-            return jsonify({"error": "Cloudflare refused connection", "code": response.status_code}), 500
+    
+    # POST: Update Data (from N8N or Scraper)
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            raw_items = data.get('services', []) if isinstance(data, dict) else data
+            if not isinstance(raw_items, list): raw_items = [raw_items]
+
+            cleaned_list = []
             
-        data = response.json()
-        
-        # Cloudflare usually returns { "data": [...] }
-        raw_list = data.get('data', []) if isinstance(data, dict) else data
-        
-        # Clean the data
-        clean_list = []
-        for item in raw_list:
-            clean_item = clean_and_format(item)
-            if clean_item:
-                clean_list.append(clean_item)
+            for item in raw_items:
+                # 1. Run the Firewall
+                if is_garbage(item):
+                    continue 
                 
-        # Update Memory
-        if len(clean_list) > 0:
-            # We keep the backup data at the top, then add new findings
-            SERVICES_DATA = INITIAL_DATA + clean_list
-            print(f"SUCCESS: Updated with {len(clean_list)} new services.")
-            return jsonify({
-                "status": "success", 
-                "message": "Database updated successfully", 
-                "total_services": len(SERVICES_DATA)
-            })
-        else:
-            return jsonify({"status": "warning", "message": "Cloudflare returned 0 valid items"}), 200
+                # 2. Clean valid items
+                cleaned_list.append(clean_item(item))
 
-    except Exception as e:
-        print(f"ERROR: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+            if len(cleaned_list) > 0:
+                # Keep backup data at the start, append new data
+                SERVICES_DATA = INITIAL_DATA + cleaned_list
+                print(f"[SUCCESS] Website updated with {len(cleaned_list)} clean services.")
+                return jsonify({"status": "success", "count": len(cleaned_list)}), 200
+            else:
+                return jsonify({"status": "ignored", "message": "All data was garbage/z-index"}), 400
 
-@app.route('/api/services')
-def get_services():
-    """Frontend fetches data from here"""
+        except Exception as e:
+            return jsonify({"status": "error", "message": str(e)}), 500
+    
+    # GET: Fetch Data
     category = request.args.get('category')
     search = request.args.get('search', '').lower()
     
@@ -126,15 +123,24 @@ def get_services():
         filtered = [s for s in filtered if s['category'].lower() == category.lower()]
     
     if search:
-        filtered = [s for s in filtered if search in s['service_name'].lower()]
-        
+        filtered = [s for s in filtered if 
+                   search in s['service_name'].lower() or 
+                   search in str(s.get('paybill_number', '')).lower()]
+    
     return jsonify(filtered)
 
 @app.route('/api/categories')
-def get_categories():
+def categories():
     if not SERVICES_DATA: return jsonify([])
     cats = list(set(s['category'] for s in SERVICES_DATA))
     return jsonify(sorted(cats))
+
+@app.route('/service/<service_name>')
+def service_detail(service_name):
+    service = next((s for s in SERVICES_DATA if s['service_name'].lower() == service_name.lower()), None)
+    if service:
+        return render_template('service_detail.html', service=service)
+    return "Service not found", 404
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
