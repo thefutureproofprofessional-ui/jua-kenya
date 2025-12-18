@@ -20,7 +20,6 @@ jua-kenya/
 ├── app.py                    # Flask application
 ├── requirements.txt          # Python dependencies
 ├── Dockerfile               # Docker configuration
-├── n8n-workflow.json        # N8N automation workflow
 ├── .env.example             # Environment variables template
 ├── templates/
 │   └── index.html           # Main HTML template
@@ -170,6 +169,5 @@ jua-kenya/
 ├── requirements.txt
 ├── Dockerfile
 ├── .env.example
-├── n8n-workflow.json
 └── templates/
     └── index.html
