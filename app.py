@@ -128,7 +128,6 @@ def categories():
     except Exception as e:
         print(f"[ERROR] Categories endpoint failed: {e}")
         return jsonify([]), 500
-```
 
 @app.route('/service/<service_name>')
 def service_detail(service_name):
