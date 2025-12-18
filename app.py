@@ -5,173 +5,146 @@ A modern, responsive web application for accessing Kenyan service information
 
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
-from datetime import datetime
 import json
-import os
 
 app = Flask(__name__)
 CORS(app)
 
-# In-memory storage (replace with database in production)
+# --- 1. THE DATA STORAGE ---
 SERVICES_DATA = []
-
-# Sample initial data - ensures your site works even before N8N runs
 INITIAL_DATA = [
     {
         "service_name": "Passport Application (Ordinary)",
         "category": "Government",
         "paybill_number": "222222",
         "account_format": "eCitizen Invoice No",
-        "requirements": "ID, Birth Cert, Parents IDs, Recommender ID",
-        "cost": "34 Pages: Ksh 7,550 | 50 Pages: Ksh 9,550 | 66 Pages: Ksh 12,050",
-        "process_steps": "Apply via eCitizen -> Immigration. Booking required.",
+        "requirements": "ID, Birth Cert, Parents IDs",
+        "cost": "Ksh 4,550",
+        "process_steps": "Apply via eCitizen",
         "source_url": "https://immigration.go.ke"
     },
     {
-        "service_name": "National ID (First Time)",
-        "category": "Government",
-        "paybill_number": "222222",
-        "account_format": "eCitizen Invoice No",
-        "requirements": "Birth Cert, Parents IDs, Proof of Residence",
-        "cost": "Ksh 300",
-        "process_steps": "Must be done in person at Huduma Center/Registrar",
-        "source_url": "https://identity.go.ke"
-    },
-    {
-        "service_name": "Equity Bank (Mobile)",
-        "category": "Banking",
-        "paybill_number": "247247",
-        "account_format": "Bank Account Number",
-        "requirements": None,
-        "cost": "Transaction Fee",
-        "process_steps": "Dial USSD *247# for menu",
-        "source_url": "https://equitygroupholdings.com"
-    },
-    {
-        "service_name": "KCB Bank (Mobile)",
-        "category": "Banking",
-        "paybill_number": "522522",
-        "account_format": "Bank Account Number",
-        "requirements": None,
-        "cost": "Transaction Fee",
-        "process_steps": "Dial USSD *522# for menu",
-        "source_url": "https://kcbgroup.com"
-    },
-    {
-        "service_name": "DSTV Kenya",
-        "category": "Entertainment",
-        "paybill_number": "444900",
-        "account_format": "Smart Card Number",
-        "requirements": None,
-        "cost": "Subscription Plan",
-        "process_steps": "Ensure decoder is on when paying",
-        "source_url": "https://dstv.com"
+        "service_name": "Kenya Power (Prepaid)",
+        "category": "Utilities",
+        "paybill_number": "888880",
+        "account_format": "Meter No",
+        "requirements": "None",
+        "cost": "Bill Amount",
+        "process_steps": "Pay via M-PESA",
+        "source_url": "https://kplc.co.ke"
     }
 ]
-
-# Initialize with sample data
 SERVICES_DATA = INITIAL_DATA.copy()
 
+
+# --- 2. THE PRESENTATION LOGIC (Your Request) ---
+def format_for_display(service):
+    """
+    This is the logic that 'guides how Python displays data'.
+    It polishes raw data into a professional format for the website.
+    """
+    if not isinstance(service, dict):
+        return None
+
+    # Rule 1: Fix Title Capitalization (e.g., "passport" -> "Passport")
+    raw_name = service.get('service_name') or service.get('title') or "Unknown Service"
+    display_name = raw_name.replace("&#34;", "").replace("34)&", "").strip().title()
+
+    # Rule 2: Handle Empty Costs
+    raw_cost = service.get('cost')
+    if not raw_cost or raw_cost.lower() in ['none', 'null', 'undefined']:
+        display_cost = "Check with Provider"
+    else:
+        display_cost = str(raw_cost).strip()
+
+    # Rule 3: Ensure Paybill is never empty
+    raw_paybill = service.get('paybill_number') or service.get('paybill')
+    if not raw_paybill or str(raw_paybill).lower() in ['nan', 'none', 'undefined']:
+        display_paybill = "N/A"
+    else:
+        display_paybill = str(raw_paybill).strip()
+
+    return {
+        "service_name": display_name,
+        "category": (service.get('category') or "General").title(),
+        "paybill_number": display_paybill,
+        "account_format": service.get('account_format') or "Account No",
+        "cost": display_cost,
+        "requirements": service.get('requirements') or "No specific requirements",
+        "process_steps": service.get('process_steps') or "Check official website",
+        "source_url": service.get('source_url') or "#"
+    }
+
+
+# --- 3. THE API ENDPOINTS ---
 @app.route('/')
 def index():
-    """Home page"""
     return render_template('index.html')
 
 @app.route('/api/services', methods=['GET', 'POST'])
 def services():
-    """API endpoint for services with Smart Cleaning Logic"""
     global SERVICES_DATA
     
+    # --- HANDLE INCOMING DATA (From n8n) ---
     if request.method == 'POST':
         try:
-            # 1. Get the data safely
             data = request.get_json()
-            if not data:
-                return jsonify({"error": "No data provided"}), 400
-            
-            # 2. Extract the list (handle {"services": [...]} or direct [...])
+            # Handle {"services": [...]} or raw list [...]
             raw_items = data.get('services', []) if isinstance(data, dict) else data
-            
-            # Ensure it is a list
-            if not isinstance(raw_items, list):
-                raw_items = [raw_items]
+            if not isinstance(raw_items, list): raw_items = [raw_items]
 
-            # 3. CLEAN & NORMALIZE DATA (The Safety Net)
-            cleaned_services = []
-            
+            cleaned_list = []
             for item in raw_items:
-                # Skip garbage items (like empty strings or raw HTML blocks)
-                if not isinstance(item, dict) or 'html' in str(item).lower():
-                    continue
-                    
-                # Force the keys to match your website template exactly
-                normalized_item = {
-                    "service_name": item.get('service_name') or item.get('title') or "Unknown Service",
-                    "category": item.get('category') or "General",
-                    
-                    # CRITICAL FIX: Look for 'paybill', 'paybill_number', or 'Paybill'
-                    # and save it strictly as 'paybill_number' for your frontend
-                    "paybill_number": str(item.get('paybill_number') or item.get('paybill') or item.get('Paybill') or "N/A"),
-                    
-                    "account_format": item.get('account_format') or "Account No",
-                    "cost": str(item.get('cost') or "Standard Rates"),
-                    "process_steps": item.get('process_steps') or "Check provider details",
-                    "source_url": item.get('source_url') or "#",
-                    "requirements": item.get('requirements') or None
-                }
-                cleaned_services.append(normalized_item)
+                # Apply the Presentation Logic immediately upon receipt
+                polished_item = format_for_display(item)
+                if polished_item: 
+                    cleaned_list.append(polished_item)
 
-            # 4. Update the database ONLY if we have valid data
-            if len(cleaned_services) > 0:
-                SERVICES_DATA = cleaned_services
-                print(f"[SUCCESS] Website updated with {len(SERVICES_DATA)} clean services")
-                return jsonify({"status": "success", "count": len(SERVICES_DATA)}), 200
+            if cleaned_list:
+                SERVICES_DATA = cleaned_list
+                print(f"[SUCCESS] Updated {len(cleaned_list)} services.")
+                return jsonify({"status": "success", "count": len(cleaned_list)}), 200
             else:
-                print("[WARNING] Received empty or garbage data. Keeping old data.")
-                return jsonify({"status": "ignored", "message": "No valid data found in request"}), 400
+                return jsonify({"status": "ignored", "message": "No valid data"}), 400
 
         except Exception as e:
-            print(f"[ERROR] Update failed: {e}")
             return jsonify({"status": "error", "message": str(e)}), 500
     
-    # GET request - return services to the frontend
+    # --- HANDLE OUTGOING DATA (To Website) ---
+    # We apply the presentation logic ONE MORE TIME just to be safe
+    # before sending to the frontend.
+    
     category = request.args.get('category')
     search = request.args.get('search', '').lower()
     
+    # Filter Logic
     filtered = SERVICES_DATA
-    
     if category:
-        filtered = [s for s in filtered if s.get('category') == category]
+        filtered = [s for s in filtered if s['category'].lower() == category.lower()]
     
     if search:
         filtered = [s for s in filtered if 
-                   search in s.get('service_name', '').lower() or 
-                   search in s.get('requirements', '').lower()]
+                   search in s['service_name'].lower() or 
+                   search in str(s.get('paybill_number', '')).lower()]
     
     return jsonify(filtered)
 
+
 @app.route('/api/categories')
 def categories():
-    """Get all unique categories"""
-    try:
-        # Ensure SERVICES_DATA is a list
-        if not isinstance(SERVICES_DATA, list):
-            return jsonify([])
-        
-        cats = list(set(s.get('category', 'Unknown') for s in SERVICES_DATA if isinstance(s, dict)))
-        return jsonify(sorted(cats))
-    except Exception as e:
-        print(f"[ERROR] Categories endpoint failed: {e}")
-        return jsonify([]), 500
+    """Get unique categories for the dropdown menu"""
+    if not SERVICES_DATA: return jsonify([])
+    cats = list(set(s['category'] for s in SERVICES_DATA))
+    return jsonify(sorted(cats))
 
 @app.route('/service/<service_name>')
 def service_detail(service_name):
-    """Service detail page"""
-    service = next((s for s in SERVICES_DATA if s['service_name'] == service_name), None)
+    """Detail page logic"""
+    # Find service (case-insensitive search)
+    service = next((s for s in SERVICES_DATA if s['service_name'].lower() == service_name.lower()), None)
     if service:
         return render_template('service_detail.html', service=service)
     return "Service not found", 404
 
 if __name__ == '__main__':
-    # In production, use gunicorn or similar
     app.run(debug=True, host='0.0.0.0', port=5000)
