@@ -82,11 +82,22 @@ def services():
     if request.method == 'POST':
         # Update services from N8N
         data = request.get_json()
+        
+        # Handle both formats: {"services": [...]} or direct array [...]
         if 'services' in data:
-            global SERVICES_DATA
-            SERVICES_DATA = data['services']
-            return jsonify({"status": "success", "message": "Services updated"}), 200
-        return jsonify({"status": "error", "message": "Invalid data"}), 400
+            new_services = data['services']
+        else:
+            new_services = data
+        
+        # Ensure it's a list
+        if not isinstance(new_services, list):
+            new_services = [new_services]
+        
+        global SERVICES_DATA
+        SERVICES_DATA = new_services
+        
+        print(f"[N8N UPDATE] Updated {len(SERVICES_DATA)} services")
+        return jsonify({"status": "success", "message": "Services updated"}), 200
     
     # GET request - return services
     category = request.args.get('category')
